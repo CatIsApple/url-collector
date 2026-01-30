@@ -253,7 +253,7 @@ class BrandSearcher:
         # 검색어: 브랜드명 (정확한 매칭을 위해 따옴표)
         query = f'"{brand_name}"'
 
-        while len(all_results) < num_results and page <= 100:
+        while len(all_results) < num_results and page <= 10:
             try:
                 resp = self.session.post(
                     self.SERPER_URL,
@@ -300,14 +300,14 @@ class BrandSearcher:
 
         return all_results[:num_results]
 
-    def site_search(self, domain: str, num_results: int = 1000) -> list[dict]:
+    def site_search(self, domain: str, num_results: int = 100) -> list[dict]:
         """site: 검색으로 해당 도메인의 페이지 수집"""
         all_results = []
         seen_urls = set()
         page = 1
         per_page = 10
 
-        while len(all_results) < num_results and page <= 100:
+        while len(all_results) < num_results and page <= 10:
             try:
                 resp = self.session.post(
                     self.SERPER_URL,
@@ -349,7 +349,7 @@ class BrandSearcher:
         self,
         domain: str,
         brand_name: str = None,
-        num_results: int = 1000
+        num_results: int = 100
     ) -> list[dict]:
         """
         도메인의 SEO 중요 페이지 수집
@@ -488,7 +488,7 @@ def filter_brand_results(
     results: list[dict],
     target_domain: str = None,
     min_score: int = 0,
-    max_results: int = 1000
+    max_results: int = 100
 ) -> list[dict]:
     """
     브랜드 검색 결과 필터링 (SEO 페이지 우선)

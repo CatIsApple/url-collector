@@ -13,8 +13,8 @@ def is_obvious_post(url: str) -> bool:
     path = unquote(parsed.path).rstrip("/")
     query = parsed.query
 
-    # 게시글 관련 파라미터가 있으면 POST
-    post_params = ["wr_id", "spt", "sca", "sst", "sod", "sop", "stx", "sfl"]
+    # 게시글/페이지네이션 관련 파라미터가 있으면 POST
+    post_params = ["wr_id", "spt", "sca", "sst", "sod", "sop", "stx", "sfl", "page"]
     if any(p + "=" in query for p in post_params):
         return True
 
@@ -36,49 +36,49 @@ def is_obvious_post(url: str) -> bool:
         if re.search(r'[가-힣]', last_segment) and last_segment.count("-") >= 2:
             return True
 
+    # 숫자로만 된 세그먼트가 있으면 POST (게시글 ID)
+    for seg in segments:
+        if re.match(r'^\d+$', seg) and len(seg) >= 2:
+            return True
+
     return False
 
 
 def is_obvious_seo(url: str) -> bool:
-    """규칙 기반으로 명확한 SEO 페이지 판별"""
+    """규칙 기반으로 명확한 SEO 페이지 판별 (매우 엄격하게)"""
     parsed = urlparse(url)
     path = unquote(parsed.path).rstrip("/")
     query = parsed.query
+
+    # 쿼리 파라미터가 있으면 대부분 POST (페이지네이션 등)
+    if query:
+        # 순수 bo_table만 있는 경우만 SEO
+        if "board.php" in path and "bo_table=" in query:
+            # page, wr_id 등 다른 파라미터 있으면 POST
+            exclude_params = ["wr_id", "sca", "spt", "sst", "sod", "sop", "stx", "sfl", "page"]
+            if any(p + "=" in query for p in exclude_params):
+                return False
+            # bo_table만 있는 경우만 SEO
+            if query.count("=") == 1:
+                return True
+        return False
 
     # 루트 페이지
     if not path or path == "/":
         return True
 
-    # board.php?bo_table=xxx (순수 게시판 목록만)
-    # sca, spt, sst, sod, sop, wr_id 등 추가 파라미터 있으면 제외
-    if "board.php" in path and "bo_table=" in query:
-        exclude_params = ["wr_id", "sca", "spt", "sst", "sod", "sop", "stx", "sfl"]
-        if not any(p + "=" in query for p in exclude_params):
-            return True
-
-    # tag.php (태그 검색 페이지) - SEO 페이지
-    if "tag.php" in path:
-        return True
-
-    # page.php (정적 페이지) - SEO 페이지
-    if "page.php" in path:
-        return True
-
-    # search.php (검색 결과 페이지) - SEO 페이지
-    if "search.php" in path:
-        return True
-
-    # 회원 관련 페이지
-    member_pages = ["login", "register", "password", "profile", "logout"]
-    if any(page in path.lower() for page in member_pages):
-        return True
-
-    # 단일 세그먼트 카테고리 (예: /free, /notice, /event)
+    # 경로 세그먼트 분석
     segments = [s for s in path.split("/") if s and not s.endswith(".php")]
+
+    # .php 파일이 있으면 AI에게 맡김
+    if ".php" in path:
+        return False
+
+    # 단일 세그먼트 카테고리만 SEO (예: /free, /notice, /event)
     if len(segments) == 1:
         segment = segments[0]
-        # 순수 숫자가 아니면 SEO
-        if not re.match(r'^\d+$', segment):
+        # 순수 숫자가 아니고, 짧은 이름이면 SEO
+        if not re.match(r'^\d+$', segment) and len(segment) <= 15:
             return True
 
     return False
