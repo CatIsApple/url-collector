@@ -327,7 +327,7 @@ class URLCollectorApp(ctk.CTk):
 
         ctk.CTkLabel(
             info_row,
-            text="by Claude",
+            text="by 다아온",
             font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_muted"]
         ).pack(side="right")

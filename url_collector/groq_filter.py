@@ -244,33 +244,85 @@ def remove_page_param(url: str) -> str:
         return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
 
+def extract_category_urls(urls: list[dict]) -> list[dict]:
+    """게시글 URL에서 카테고리 URL 추출"""
+    categories = set()
+    domain = None
+
+    for item in urls:
+        url = item["url"]
+        parsed = urlparse(url)
+
+        if not domain:
+            domain = f"{parsed.scheme}://{parsed.netloc}"
+
+        query = parsed.query
+        if not query:
+            continue
+
+        # bo_table 파라미터 추출
+        params = parse_qs(query)
+        if "bo_table" in params:
+            bo_table = params["bo_table"][0]
+            categories.add(bo_table)
+
+    # 카테고리 URL 생성
+    result = []
+    for cat in sorted(categories):
+        cat_url = f"{domain}/bbs/board.php?bo_table={cat}"
+        result.append({
+            "url": cat_url,
+            "title": f"{cat} 게시판",
+            "snippet": "",
+            "domain": urlparse(domain).netloc if domain else "",
+        })
+
+    return result
+
+
 def filter_urls_with_ai(urls: list[dict], api_key: Optional[str] = None) -> list[dict]:
     """AI를 사용하여 SEO 페이지만 필터링"""
     if not urls:
         return []
 
+    url_list = [item["url"] for item in urls]
+
     try:
         groq = GroqFilter(api_key)
-        url_list = [item["url"] for item in urls]
         classifications = groq.classify_urls(url_list)
-
-        # SEO로 분류된 것만 필터링
-        seo_items = [item for item in urls if classifications.get(item["url"]) == "SEO"]
-
-        # page 파라미터 제거 및 중복 제거
-        seen_urls = set()
-        result = []
-        for item in seo_items:
-            clean_url = remove_page_param(item["url"])
-            if clean_url not in seen_urls:
-                seen_urls.add(clean_url)
-                item["url"] = clean_url  # URL 업데이트
-                result.append(item)
-
-        return result
     except Exception as e:
-        print(f"[WARN] AI 필터링 실패: {e}")
-        return urls
+        print(f"[WARN] AI 필터링 실패, 규칙 기반만 적용: {e}")
+        # API 실패 시 규칙 기반만으로 분류
+        classifications = {}
+        for url in url_list:
+            if is_obvious_post(url):
+                classifications[url] = "POST"
+            elif is_obvious_seo(url):
+                classifications[url] = "SEO"
+            else:
+                # 불확실하면 POST로 처리 (안전하게)
+                classifications[url] = "POST"
+
+    # SEO로 분류된 것만 필터링
+    seo_items = [item for item in urls if classifications.get(item["url"]) == "SEO"]
+
+    # 게시글에서 카테고리 URL 추출 (wr_id 있는 URL에서 bo_table 추출)
+    category_urls = extract_category_urls(urls)
+
+    # 기존 SEO + 추출된 카테고리 병합
+    all_seo = seo_items + category_urls
+
+    # page 파라미터 제거 및 중복 제거
+    seen_urls = set()
+    result = []
+    for item in all_seo:
+        clean_url = remove_page_param(item["url"])
+        if clean_url not in seen_urls:
+            seen_urls.add(clean_url)
+            item["url"] = clean_url  # URL 업데이트
+            result.append(item)
+
+    return result
 
 
 if __name__ == "__main__":
