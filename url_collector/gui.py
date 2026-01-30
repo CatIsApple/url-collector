@@ -1867,22 +1867,21 @@ class URLCollectorApp(ctk.CTk):
                 if search_mode == "seo":
                     searcher = BrandSearcher(api_key)
                     self.after(0, lambda: self._log("브랜드명 추출 중...", "info"))
-                    raw = searcher.search_domain(domain, num_results=100)
+                    raw = searcher.search_domain(domain, num_results=1000)
                     self.after(0, lambda r=len(raw): self._log(f"검색 결과: {r}개 URL", "info"))
 
                     try:
                         self.after(0, lambda: self._log("AI 필터링 중 (Groq)...", "accent"))
                         results = filter_urls_with_ai(raw)
-                        results = results[:50]
                         self.after(0, lambda r=len(results): self._log(f"AI 필터 완료: {r}개 SEO 페이지", "success"))
                     except Exception as e:
                         self.after(0, lambda e=str(e): self._log(f"AI 필터 실패: {e}", "warning"))
-                        results = filter_brand_results(raw, target_domain=domain, min_score=50, max_results=50)
+                        results = filter_brand_results(raw, target_domain=domain, min_score=50, max_results=1000)
                 else:
                     client = SerperClient(api_key)
-                    raw = client.site_search(domain, num_results=100)
+                    raw = client.site_search(domain, num_results=1000)
                     self.after(0, lambda r=len(raw): self._log(f"검색 결과: {r}개 URL", "info"))
-                    results = filter_urls(raw, strict=False, max_per_domain=50)
+                    results = filter_urls(raw, strict=False, max_per_domain=1000)
 
                 total += len(results)
                 self.after(0, lambda d=domain, r=results, mode=search_mode: self._append_result(d, r, mode=mode))
