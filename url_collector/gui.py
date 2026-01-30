@@ -31,15 +31,18 @@ def load_pretendard_font():
 
     # macOS/Windows에서 폰트 로드
     if sys.platform == 'darwin':
-        # macOS: CoreText로 폰트 로드
+        # macOS: PyObjC를 사용하여 안전하게 폰트 등록
         try:
-            from ctypes import cdll, c_void_p, c_char_p, c_bool
-            ct = cdll.LoadLibrary('/System/Library/Frameworks/CoreText.framework/CoreText')
+            from Foundation import NSURL
+            from CoreText import CTFontManagerRegisterFontsForURL, kCTFontManagerScopeProcess
             for path in [regular_path, bold_path]:
                 if os.path.exists(path):
-                    url = c_char_p(f'file://{path}'.encode())
-                    ct.CTFontManagerRegisterFontsForURL(url, 0, None)
-        except:
+                    font_url = NSURL.fileURLWithPath_(path)
+                    CTFontManagerRegisterFontsForURL(font_url, kCTFontManagerScopeProcess, None)
+        except ImportError:
+            # PyObjC가 없으면 시스템 폰트 사용
+            pass
+        except Exception:
             pass
     elif sys.platform == 'win32':
         # Windows: AddFontResourceEx
