@@ -1,0 +1,20 @@
+[project]
+name = "url-collector"
+version = "1.0.0"
+description = "Google site: 검색 URL 수집기 (SERP API)"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31.0",
+    "customtkinter>=5.2.0",
+]
+
+[project.optional-dependencies]
+build = [
+    "pyinstaller>=6.0.0",
+]
+
+[project.scripts]
+url-collector = "url_collector.cli:main"
+
+[project.gui-scripts]
+url-collector-gui = "url_collector.gui:main"
