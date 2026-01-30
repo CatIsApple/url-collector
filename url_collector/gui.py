@@ -773,7 +773,8 @@ class URLCollectorApp(ctk.CTk):
             fg_color=COLORS["border"],
             progress_color=COLORS["accent"],
             button_color=COLORS["text"],
-            button_hover_color=COLORS["text_secondary"]
+            button_hover_color=COLORS["text_secondary"],
+            command=self._on_auto_submit_toggle
         )
         self.auto_submit_switch.pack(side="right")
 
@@ -782,6 +783,39 @@ class URLCollectorApp(ctk.CTk):
             text="⚠️ 활성화 시 제출 버튼까지 자동 클릭됩니다",
             font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["warning"]
+        ).pack(anchor="w", padx=24, pady=(0, 8))
+
+        # 자동 리디렉션 옵션
+        auto_redirect_frame = ctk.CTkFrame(options_card, fg_color="transparent")
+        auto_redirect_frame.pack(fill="x", padx=24, pady=(8, 8))
+
+        ctk.CTkLabel(
+            auto_redirect_frame,
+            text="자동 리디렉션",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(side="left")
+
+        self.auto_redirect_var = ctk.BooleanVar(value=False)
+        self.auto_redirect_switch = ctk.CTkSwitch(
+            auto_redirect_frame,
+            text="",
+            variable=self.auto_redirect_var,
+            width=44,
+            height=22,
+            fg_color=COLORS["border"],
+            progress_color=COLORS["accent"],
+            button_color=COLORS["text"],
+            button_hover_color=COLORS["text_secondary"],
+            state="disabled"
+        )
+        self.auto_redirect_switch.pack(side="right")
+
+        ctk.CTkLabel(
+            options_card,
+            text="⚠️ 제출 후 다음 신고 페이지로 자동 이동합니다",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
+            text_color=COLORS["text_muted"]
         ).pack(anchor="w", padx=24, pady=(0, 8))
 
         # 코드 생성 버튼
@@ -896,6 +930,14 @@ class URLCollectorApp(ctk.CTk):
 
     def _on_template_change(self, value):
         pass
+
+    def _on_auto_submit_toggle(self):
+        """자동 제출 토글 시 자동 리디렉션 상태 업데이트"""
+        if self.auto_submit_var.get():
+            self.auto_redirect_switch.configure(state="normal")
+        else:
+            self.auto_redirect_var.set(False)
+            self.auto_redirect_switch.configure(state="disabled")
 
     def _generate_report_code(self):
         """신고 코드 생성"""
@@ -1210,7 +1252,27 @@ class URLCollectorApp(ctk.CTk):
 
         # 자동 제출 옵션이 켜져 있으면 제출 코드 추가
         if self.auto_submit_var.get():
-            js_code += '''
+            # 자동 리디렉션 URL
+            redirect_url = "https://support.google.com/legal/contact/lr_legalother?product=websearch&uraw&ctx=magi&sjid=14649864030784806781-NC&hl=ko"
+
+            if self.auto_redirect_var.get():
+                js_code += f'''
+  // ========== 자동 제출 및 리디렉션 ==========
+  await delay(1000);
+  const submitButton = document.querySelector('input[type="submit"], button[type="submit"], .submit-button, button[name="submit"]');
+  if (submitButton) {{
+    console.log('🚀 제출 버튼 클릭 중...');
+    submitButton.click();
+    console.log('✓ 제출 완료!');
+    console.log('🔄 3초 후 다음 신고 페이지로 이동합니다...');
+    await delay(3000);
+    window.location.href = "{redirect_url}";
+  }} else {{
+    console.log('⚠ 제출 버튼을 찾지 못했습니다. 수동으로 제출해주세요.');
+  }}
+'''
+            else:
+                js_code += '''
   // ========== 자동 제출 ==========
   await delay(1000);
   const submitButton = document.querySelector('input[type="submit"], button[type="submit"], .submit-button, button[name="submit"]');
