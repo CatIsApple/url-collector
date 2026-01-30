@@ -1,6 +1,7 @@
 """URL Collector - Dashboard Style GUI"""
 
 import os
+import sys
 import json
 import threading
 from datetime import datetime
@@ -8,6 +9,54 @@ from typing import Optional
 from urllib.parse import unquote
 
 import customtkinter as ctk
+from tkinter import font as tkfont
+
+
+def get_font_path():
+    """폰트 경로 반환 (PyInstaller 번들 지원)"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 번들
+        base_path = sys._MEIPASS
+    else:
+        # 개발 환경
+        base_path = os.path.dirname(__file__)
+    return os.path.join(base_path, 'fonts')
+
+
+def load_pretendard_font():
+    """Pretendard 폰트 로드"""
+    font_path = get_font_path()
+    regular_path = os.path.join(font_path, 'Pretendard-Regular.otf')
+    bold_path = os.path.join(font_path, 'Pretendard-Bold.otf')
+
+    # macOS/Windows에서 폰트 로드
+    if sys.platform == 'darwin':
+        # macOS: CoreText로 폰트 로드
+        try:
+            from ctypes import cdll, c_void_p, c_char_p, c_bool
+            ct = cdll.LoadLibrary('/System/Library/Frameworks/CoreText.framework/CoreText')
+            for path in [regular_path, bold_path]:
+                if os.path.exists(path):
+                    url = c_char_p(f'file://{path}'.encode())
+                    ct.CTFontManagerRegisterFontsForURL(url, 0, None)
+        except:
+            pass
+    elif sys.platform == 'win32':
+        # Windows: AddFontResourceEx
+        try:
+            import ctypes
+            FR_PRIVATE = 0x10
+            for path in [regular_path, bold_path]:
+                if os.path.exists(path):
+                    ctypes.windll.gdi32.AddFontResourceExW(path, FR_PRIVATE, 0)
+        except:
+            pass
+
+    return 'Pretendard' if os.path.exists(regular_path) else None
+
+
+# 폰트 로드
+FONT_FAMILY = load_pretendard_font() or 'SF Pro Display'
 
 
 def decode_url(url: str) -> str:
@@ -89,7 +138,7 @@ class Toast(ctk.CTkFrame):
         ctk.CTkLabel(
             content,
             text=icon,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
             text_color="#ffffff",
             width=20
         ).pack(side="left", padx=(0, 10))
@@ -97,7 +146,7 @@ class Toast(ctk.CTkFrame):
         ctk.CTkLabel(
             content,
             text=message,
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
             text_color="#ffffff"
         ).pack(side="left")
 
@@ -201,14 +250,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             logo_frame,
             text="URL Collector",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=20, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w")
 
         ctk.CTkLabel(
             logo_frame,
             text="Google 법적 신고 자동화",
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", pady=(2, 0))
 
@@ -223,7 +272,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             self.sidebar,
             text="메뉴",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", padx=24, pady=(0, 8))
 
@@ -243,7 +292,7 @@ class URLCollectorApp(ctk.CTk):
             btn = ctk.CTkButton(
                 btn_frame,
                 text=f"{icon}   {title}",
-                font=ctk.CTkFont(size=14),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=14),
                 fg_color="transparent",
                 hover_color=COLORS["bg_card"],
                 text_color=COLORS["text_secondary"],
@@ -272,14 +321,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             info_row,
             text="v1.0.0",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_muted"]
         ).pack(side="left")
 
         ctk.CTkLabel(
             info_row,
             text="by Claude",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_muted"]
         ).pack(side="right")
 
@@ -340,14 +389,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             header_text,
             text="URL 수집",
-            font=ctk.CTkFont(size=26, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=26, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w")
 
         ctk.CTkLabel(
             header_text,
             text="Serper API를 사용하여 사이트의 SEO 페이지를 수집합니다",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", pady=(4, 0))
 
@@ -373,21 +422,21 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             api_label_row,
             text="Serper API Key",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
             text_color=COLORS["text"]
         ).pack(side="left")
 
         ctk.CTkLabel(
             api_label_row,
             text="serper.dev에서 발급",
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             text_color=COLORS["text_muted"]
         ).pack(side="right")
 
         self.api_entry = ctk.CTkEntry(
             api_frame,
             height=44,
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
             placeholder_text="API 키를 입력하세요",
             fg_color=COLORS["bg_input"],
             border_color=COLORS["border"],
@@ -410,21 +459,21 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             domain_label_row,
             text="도메인",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
             text_color=COLORS["text"]
         ).pack(side="left")
 
         ctk.CTkLabel(
             domain_label_row,
             text="한 줄에 하나씩",
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             text_color=COLORS["text_muted"]
         ).pack(side="right")
 
         self.domain_textbox = ctk.CTkTextbox(
             domain_frame,
             height=90,
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
             fg_color=COLORS["bg_input"],
             border_color=COLORS["border"],
             border_width=1,
@@ -446,7 +495,7 @@ class URLCollectorApp(ctk.CTk):
             text="SEO 페이지",
             variable=self.search_mode_var,
             value="seo",
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
             fg_color=COLORS["accent"],
             border_color=COLORS["border"]
         ).pack(side="left", padx=(0, 20))
@@ -456,7 +505,7 @@ class URLCollectorApp(ctk.CTk):
             text="게시글",
             variable=self.search_mode_var,
             value="article",
-            font=ctk.CTkFont(size=13),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
             fg_color=COLORS["accent"],
             border_color=COLORS["border"]
         ).pack(side="left")
@@ -466,7 +515,7 @@ class URLCollectorApp(ctk.CTk):
             text="🔍  수집 시작",
             width=140,
             height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
             corner_radius=STYLES["button_radius"],
@@ -499,14 +548,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             result_header,
             text="📄  수집 결과",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
             text_color=COLORS["text"]
         ).pack(side="left")
 
         self.result_count = ctk.CTkLabel(
             result_header,
             text="0개",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             text_color=COLORS["accent"],
             fg_color=COLORS["accent_subtle"],
             corner_radius=6,
@@ -520,7 +569,7 @@ class URLCollectorApp(ctk.CTk):
 
         ctk.CTkButton(
             btn_group, text="📋 복사", width=80, height=34,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             fg_color=COLORS["bg_input"], hover_color=COLORS["border"],
             border_width=1, border_color=COLORS["border"],
             corner_radius=STYLES["button_radius"], command=self._on_copy
@@ -528,7 +577,7 @@ class URLCollectorApp(ctk.CTk):
 
         ctk.CTkButton(
             btn_group, text="💾 저장", width=80, height=34,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             fg_color=COLORS["bg_input"], hover_color=COLORS["border"],
             border_width=1, border_color=COLORS["border"],
             corner_radius=STYLES["button_radius"], command=self._on_save
@@ -562,7 +611,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             log_header,
             text="📝  로그",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
             text_color=COLORS["text"]
         ).pack(side="left")
 
@@ -614,14 +663,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             header_text,
             text="신고 코드 생성",
-            font=ctk.CTkFont(size=26, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=26, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w")
 
         ctk.CTkLabel(
             header_text,
             text="Google 법적 신고 양식을 자동으로 채우는 JavaScript 코드",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", pady=(4, 0))
 
@@ -649,7 +698,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             domain_section,
             text="도메인 선택",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w", pady=(0, 10))
 
@@ -659,7 +708,7 @@ class URLCollectorApp(ctk.CTk):
             values=list(self.results.keys()) if self.results else ["수집된 도메인 없음"],
             variable=self.code_domain_var,
             height=40,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             fg_color=COLORS["bg_input"],
             border_color=COLORS["border"],
             button_color=COLORS["accent"],
@@ -676,7 +725,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             template_section,
             text="템플릿 선택",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w", pady=(0, 10))
 
@@ -690,7 +739,7 @@ class URLCollectorApp(ctk.CTk):
             values=template_names,
             variable=self.code_template_var,
             height=40,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             fg_color=COLORS["bg_input"],
             border_color=COLORS["border"],
             button_color=COLORS["accent"],
@@ -705,7 +754,7 @@ class URLCollectorApp(ctk.CTk):
             options_card,
             text="⚡  코드 생성",
             height=44,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
             corner_radius=STYLES["button_radius"],
@@ -725,7 +774,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             guide_frame,
             text="💡  사용법",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w", padx=16, pady=(16, 8))
 
@@ -738,7 +787,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             guide_frame,
             text=guide_text,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             text_color=COLORS["text_muted"],
             justify="left"
         ).pack(anchor="w", padx=16, pady=(0, 16))
@@ -761,7 +810,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             code_header,
             text="</> JavaScript 코드",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
             text_color=COLORS["text"]
         ).pack(side="left")
 
@@ -770,7 +819,7 @@ class URLCollectorApp(ctk.CTk):
             text="복사",
             width=80,
             height=32,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             fg_color=COLORS["bg_input"],
             hover_color=COLORS["border"],
             corner_radius=6,
@@ -1168,14 +1217,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             header_text,
             text="설정",
-            font=ctk.CTkFont(size=26, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=26, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w")
 
         ctk.CTkLabel(
             header_text,
             text="신청인 정보와 신고 템플릿을 관리합니다",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", pady=(4, 0))
 
@@ -1192,7 +1241,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             applicant_card,
             text="👤  신청인 정보",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
             text_color=COLORS["text"]
         ).pack(anchor="w", padx=24, pady=(24, 20))
 
@@ -1218,21 +1267,21 @@ class URLCollectorApp(ctk.CTk):
             ctk.CTkLabel(
                 label_row,
                 text=label,
-                font=ctk.CTkFont(size=12, weight="bold"),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
                 text_color=COLORS["text"]
             ).pack(side="left")
 
             ctk.CTkLabel(
                 label_row,
                 text=hint,
-                font=ctk.CTkFont(size=10),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=10),
                 text_color=COLORS["text_muted"]
             ).pack(side="right")
 
             entry = ctk.CTkEntry(
                 frame,
                 height=40,
-                font=ctk.CTkFont(size=12),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
                 fg_color=COLORS["bg_input"],
                 border_color=COLORS["border"],
                 border_width=1,
@@ -1247,7 +1296,7 @@ class URLCollectorApp(ctk.CTk):
             applicant_card,
             text="💾  저장",
             height=40,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
             corner_radius=STYLES["button_radius"],
@@ -1271,7 +1320,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             template_header,
             text="📝  템플릿 관리",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
             text_color=COLORS["text"]
         ).pack(side="left")
 
@@ -1280,7 +1329,7 @@ class URLCollectorApp(ctk.CTk):
             text="+ 새 템플릿",
             width=100,
             height=32,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             fg_color=COLORS["bg_input"],
             hover_color=COLORS["border"],
             border_width=1,
@@ -1328,7 +1377,7 @@ class URLCollectorApp(ctk.CTk):
             edit_frame,
             height=40,
             placeholder_text="템플릿 이름을 입력하세요",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             fg_color=COLORS["bg_card"],
             border_color=COLORS["border"],
             border_width=1,
@@ -1339,14 +1388,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             edit_frame,
             text="불법 이유 설명",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             text_color=COLORS["text_secondary"]
         ).pack(anchor="w", padx=16)
 
         self.template_reason_textbox = ctk.CTkTextbox(
             edit_frame,
             height=70,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             fg_color=COLORS["bg_card"],
             border_width=1,
             border_color=COLORS["border_subtle"],
@@ -1357,14 +1406,14 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             edit_frame,
             text="침해 증거/인용",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             text_color=COLORS["text_secondary"]
         ).pack(anchor="w", padx=16)
 
         self.template_evidence_textbox = ctk.CTkTextbox(
             edit_frame,
             height=60,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             fg_color=COLORS["bg_card"],
             border_width=1,
             border_color=COLORS["border_subtle"],
@@ -1376,7 +1425,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             edit_frame,
             text="권리 침해 유형 (해당 항목 선택)",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             text_color=COLORS["text_secondary"]
         ).pack(anchor="w", padx=16, pady=(4, 6))
 
@@ -1386,7 +1435,7 @@ class URLCollectorApp(ctk.CTk):
             edit_frame,
             text="선정적 이미지 또는 아동 성적 학대 콘텐츠",
             variable=self.template_check1_var,
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_secondary"],
             fg_color=COLORS["accent"],
             border_color=COLORS["border"],
@@ -1404,7 +1453,7 @@ class URLCollectorApp(ctk.CTk):
             self.check1_dependent_frame,
             text="이미지/동영상의 피사체 또는 법적 대리인",
             variable=self.template_check2_var,
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_secondary"],
             fg_color=COLORS["accent"],
             border_color=COLORS["border"],
@@ -1422,7 +1471,7 @@ class URLCollectorApp(ctk.CTk):
             self.check2_dependent_frame,
             text="전기통신사업법에 따른 불법 콘텐츠",
             variable=self.template_check3_var,
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_secondary"],
             fg_color=COLORS["accent"],
             border_color=COLORS["border"],
@@ -1437,7 +1486,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             self.check3_dependent_frame,
             text="콘텐츠 신고 사유",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", pady=(4, 2))
 
@@ -1447,7 +1496,7 @@ class URLCollectorApp(ctk.CTk):
             height=32,
             values=["불법 사진 및 동영상", "가짜 이미지 및 동영상", "아동 및 청소년 성적 학대 콘텐츠"],
             variable=self.template_report_reason_var,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             fg_color=COLORS["bg_card"],
             border_color=COLORS["border"],
             border_width=1,
@@ -1464,7 +1513,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             self.check1_dependent_frame,
             text="피해자 이름 (이미지/동영상에 표시되는 사람)",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", pady=(6, 2))
 
@@ -1472,7 +1521,7 @@ class URLCollectorApp(ctk.CTk):
             self.check1_dependent_frame,
             height=32,
             placeholder_text="성과 이름을 입력하세요",
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             fg_color=COLORS["bg_card"],
             border_color=COLORS["border"],
             border_width=1,
@@ -1484,7 +1533,7 @@ class URLCollectorApp(ctk.CTk):
         ctk.CTkLabel(
             self.check1_dependent_frame,
             text="콘텐츠를 찾기 위해 사용한 검색어",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", pady=(4, 2))
 
@@ -1492,7 +1541,7 @@ class URLCollectorApp(ctk.CTk):
             self.check1_dependent_frame,
             height=32,
             placeholder_text="검색어 입력",
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             fg_color=COLORS["bg_card"],
             border_color=COLORS["border"],
             border_width=1,
@@ -1505,7 +1554,7 @@ class URLCollectorApp(ctk.CTk):
             edit_container,
             text="💾  템플릿 저장",
             height=38,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
             corner_radius=STYLES["button_radius"],
@@ -1533,14 +1582,14 @@ class URLCollectorApp(ctk.CTk):
             ctk.CTkLabel(
                 empty_frame,
                 text="📭",
-                font=ctk.CTkFont(size=24),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=24),
                 text_color=COLORS["text_muted"]
             ).pack()
 
             ctk.CTkLabel(
                 empty_frame,
                 text="저장된 템플릿이 없습니다",
-                font=ctk.CTkFont(size=12),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
                 text_color=COLORS["text_muted"]
             ).pack(pady=(8, 0))
             return
@@ -1558,7 +1607,7 @@ class URLCollectorApp(ctk.CTk):
             ctk.CTkLabel(
                 item_frame,
                 text=f"📋  {template['name']}",
-                font=ctk.CTkFont(size=12),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
                 text_color=COLORS["text"]
             ).pack(side="left", padx=14, pady=10)
 
@@ -1570,7 +1619,7 @@ class URLCollectorApp(ctk.CTk):
                 text="편집",
                 width=56,
                 height=28,
-                font=ctk.CTkFont(size=11),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=11),
                 fg_color="transparent",
                 hover_color=COLORS["border"],
                 border_width=1,
@@ -1584,7 +1633,7 @@ class URLCollectorApp(ctk.CTk):
                 text="삭제",
                 width=56,
                 height=28,
-                font=ctk.CTkFont(size=11),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=11),
                 fg_color="transparent",
                 hover_color="#3f1515",
                 text_color=COLORS["error"],

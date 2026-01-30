@@ -15,6 +15,8 @@ a = Analysis(
     datas=[
         # CustomTkinter 테마/에셋 포함
         (str(ctk_path), 'customtkinter'),
+        # Pretendard 폰트
+        ('url_collector/fonts', 'fonts'),
     ],
     hiddenimports=[
         'customtkinter',
