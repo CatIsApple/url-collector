@@ -749,6 +749,38 @@ class URLCollectorApp(ctk.CTk):
         )
         self.code_template_combo.pack(fill="x")
 
+        # 자동 제출 옵션
+        auto_submit_frame = ctk.CTkFrame(options_card, fg_color="transparent")
+        auto_submit_frame.pack(fill="x", padx=24, pady=(16, 8))
+
+        ctk.CTkLabel(
+            auto_submit_frame,
+            text="자동 제출",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(side="left")
+
+        self.auto_submit_var = ctk.BooleanVar(value=False)
+        self.auto_submit_switch = ctk.CTkSwitch(
+            auto_submit_frame,
+            text="",
+            variable=self.auto_submit_var,
+            width=44,
+            height=22,
+            fg_color=COLORS["border"],
+            progress_color=COLORS["accent"],
+            button_color=COLORS["text"],
+            button_hover_color=COLORS["text_secondary"]
+        )
+        self.auto_submit_switch.pack(side="right")
+
+        ctk.CTkLabel(
+            options_card,
+            text="⚠️ 활성화 시 제출 버튼까지 자동 클릭됩니다",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
+            text_color=COLORS["warning"]
+        ).pack(anchor="w", padx=24, pady=(0, 8))
+
         # 코드 생성 버튼
         ctk.CTkButton(
             options_card,
@@ -1171,8 +1203,27 @@ class URLCollectorApp(ctk.CTk):
   }}
 
   console.log('\\n🎉 모든 필드 자동 입력 완료!');
-  console.log('제출 전 내용을 확인하세요.');
-}})();
+'''
+
+        # 자동 제출 옵션이 켜져 있으면 제출 코드 추가
+        if self.auto_submit_var.get():
+            js_code += '''
+  // ========== 자동 제출 ==========
+  await delay(1000);
+  const submitButton = document.querySelector('input[type="submit"], button[type="submit"], .submit-button, button[name="submit"]');
+  if (submitButton) {
+    console.log('🚀 제출 버튼 클릭 중...');
+    submitButton.click();
+    console.log('✓ 제출 완료!');
+  } else {
+    console.log('⚠ 제출 버튼을 찾지 못했습니다. 수동으로 제출해주세요.');
+  }
+'''
+        else:
+            js_code += '''  console.log('제출 전 내용을 확인하세요.');
+'''
+
+        js_code += '''})();
 '''
 
         self.code_textbox.delete("0.0", "end")
