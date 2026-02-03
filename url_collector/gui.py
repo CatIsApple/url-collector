@@ -75,6 +75,7 @@ from .filter import filter_urls
 from .ai_filter import smart_filter_urls, calculate_score
 from .brand_search import BrandSearcher, filter_brand_results, calculate_seo_score
 from .groq_filter import GroqFilter, filter_urls_with_ai
+from .feedback_code_generator import generate_feedback_code
 
 
 # 프로페셔널 컬러 팔레트
@@ -190,7 +191,8 @@ class URLCollectorApp(ctk.CTk):
                 "organization": "",
                 "email": ""
             },
-            "templates": []
+            "templates": [],
+            "feedback_templates": []
         }
 
         if os.path.exists(CONFIG_PATH):
@@ -285,6 +287,7 @@ class URLCollectorApp(ctk.CTk):
         nav_items = [
             ("scraper", "🔍", "URL 수집", "사이트 URL 자동 수집", self._show_scraper_page),
             ("code", "📋", "신고 코드", "JS 코드 자동 생성", self._show_code_page),
+            ("feedback_code", "📝", "의견 코드", "의견 JS 코드 생성", self._show_feedback_code_page),
             ("settings", "⚙️", "설정", "신청인 정보 및 템플릿", self._show_settings_page),
         ]
 
@@ -1041,11 +1044,15 @@ class URLCollectorApp(ctk.CTk):
     orgInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
   }}
 
-  // 이메일
-  const emailInput = document.querySelector('input[name="contact_email"]');
-  if (emailInput && applicant.email) {{
-    emailInput.value = applicant.email;
-    emailInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+  // 이메일 - 여러 가능한 필드명 시도
+  const emailSelectors = ['input[name="contact_email_noprefill"]', 'input[name="contact_email"]', 'input#contact_email_noprefill'];
+  for (const sel of emailSelectors) {{
+    const emailInput = document.querySelector(sel);
+    if (emailInput && applicant.email) {{
+      emailInput.value = applicant.email;
+      emailInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+      break;
+    }}
   }}
 
   console.log('✓ 신청인 정보 입력 완료');
@@ -1305,6 +1312,1034 @@ class URLCollectorApp(ctk.CTk):
         else:
             self._show_toast("먼저 코드를 생성해주세요", "warning")
 
+    # ==================== 자동 신고 페이지 ====================
+    def _show_auto_page(self):
+        self._set_active_nav("auto")
+        self._clear_pages()
+
+        if "auto" not in self.pages:
+            self._create_auto_page()
+        else:
+            # 페이지 진입 시 데이터 새로고침
+            self._update_auto_page_data()
+
+        self.pages["auto"].grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+
+    def _create_auto_page(self):
+        """자동 신고 페이지 생성"""
+        page = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        page.grid_columnconfigure(0, weight=1)
+        page.grid_columnconfigure(1, weight=1)
+        page.grid_rowconfigure(1, weight=1)
+        self.pages["auto"] = page
+
+        # 헤더
+        header = ctk.CTkFrame(page, fg_color="transparent")
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 24))
+
+        header_text = ctk.CTkFrame(header, fg_color="transparent")
+        header_text.pack(side="left")
+
+        ctk.CTkLabel(
+            header_text,
+            text="🤖  자동 신고",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=26, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            header_text,
+            text="Playwright를 사용한 완전 자동화 신고",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            text_color=COLORS["text_muted"]
+        ).pack(anchor="w", pady=(4, 0))
+
+        # 왼쪽: 설정 카드
+        settings_card = ctk.CTkFrame(
+            page,
+            fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["card_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+        settings_card.grid(row=1, column=0, sticky="nsew", padx=(0, 12))
+
+        ctk.CTkLabel(
+            settings_card,
+            text="⚙️  자동화 설정",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", padx=24, pady=(24, 20))
+
+        # 도메인 선택
+        domain_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        domain_frame.pack(fill="x", padx=24, pady=(0, 16))
+
+        ctk.CTkLabel(
+            domain_frame,
+            text="신고할 도메인",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.auto_domain_var = ctk.StringVar(value="도메인을 선택하세요")
+        self.auto_domain_combo = ctk.CTkComboBox(
+            domain_frame,
+            variable=self.auto_domain_var,
+            values=["수집된 도메인 없음"],
+            height=40,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            button_color=COLORS["border"],
+            button_hover_color=COLORS["accent"],
+            dropdown_fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["input_radius"],
+            command=self._on_auto_domain_change
+        )
+        self.auto_domain_combo.pack(fill="x")
+
+        # URL 개수 표시
+        self.auto_url_count_label = ctk.CTkLabel(
+            domain_frame,
+            text="URL: 0개",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+            text_color=COLORS["text_muted"]
+        )
+        self.auto_url_count_label.pack(anchor="w", pady=(8, 0))
+
+        # 템플릿 선택
+        template_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        template_frame.pack(fill="x", padx=24, pady=(0, 16))
+
+        ctk.CTkLabel(
+            template_frame,
+            text="신고 템플릿",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.auto_template_var = ctk.StringVar()
+        self.auto_template_combo = ctk.CTkComboBox(
+            template_frame,
+            variable=self.auto_template_var,
+            values=["템플릿 없음"],
+            height=40,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            button_color=COLORS["border"],
+            button_hover_color=COLORS["accent"],
+            dropdown_fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["input_radius"]
+        )
+        self.auto_template_combo.pack(fill="x")
+
+        # 옵션: 제출 간격
+        delay_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        delay_frame.pack(fill="x", padx=24, pady=(0, 16))
+
+        ctk.CTkLabel(
+            delay_frame,
+            text="제출 간격 (초)",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.auto_delay_var = ctk.StringVar(value="3")
+        delay_entry = ctk.CTkEntry(
+            delay_frame,
+            textvariable=self.auto_delay_var,
+            height=40,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            border_width=1,
+            corner_radius=STYLES["input_radius"]
+        )
+        delay_entry.pack(fill="x")
+
+        # 옵션: 브라우저 표시
+        headless_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        headless_frame.pack(fill="x", padx=24, pady=(8, 16))
+
+        ctk.CTkLabel(
+            headless_frame,
+            text="브라우저 표시",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(side="left")
+
+        self.auto_show_browser_var = ctk.BooleanVar(value=True)
+        ctk.CTkSwitch(
+            headless_frame,
+            text="",
+            variable=self.auto_show_browser_var,
+            width=44,
+            height=22,
+            fg_color=COLORS["border"],
+            progress_color=COLORS["accent"],
+            button_color=COLORS["text"],
+            button_hover_color=COLORS["text_secondary"]
+        ).pack(side="right")
+
+        ctk.CTkLabel(
+            settings_card,
+            text="💡 브라우저를 숨기면 더 빠르지만 진행 상황을 볼 수 없습니다",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
+            text_color=COLORS["text_muted"]
+        ).pack(anchor="w", padx=24, pady=(0, 16))
+
+        # 시작/중지 버튼
+        btn_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=24, pady=(8, 24))
+
+        self.auto_start_btn = ctk.CTkButton(
+            btn_frame,
+            text="🚀  자동화 시작",
+            height=48,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            corner_radius=STYLES["button_radius"],
+            command=self._start_automation
+        )
+        self.auto_start_btn.pack(fill="x", pady=(0, 8))
+
+        self.auto_stop_btn = ctk.CTkButton(
+            btn_frame,
+            text="⏹  중지",
+            height=44,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+            fg_color=COLORS["error"],
+            hover_color="#dc2626",
+            corner_radius=STYLES["button_radius"],
+            command=self._stop_automation,
+            state="disabled"
+        )
+        self.auto_stop_btn.pack(fill="x")
+
+        # 오른쪽: 진행 상황 카드
+        progress_card = ctk.CTkFrame(
+            page,
+            fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["card_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+        progress_card.grid(row=1, column=1, sticky="nsew", padx=(12, 0))
+        progress_card.grid_columnconfigure(0, weight=1)
+        progress_card.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            progress_card,
+            text="📊  진행 상황",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
+            text_color=COLORS["text"]
+        ).grid(row=0, column=0, sticky="w", padx=24, pady=(24, 16))
+
+        # 진행률 표시
+        progress_info = ctk.CTkFrame(progress_card, fg_color="transparent")
+        progress_info.grid(row=0, column=0, sticky="e", padx=24, pady=(24, 16))
+
+        self.auto_progress_label = ctk.CTkLabel(
+            progress_info,
+            text="0 / 0",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
+            text_color=COLORS["accent"]
+        )
+        self.auto_progress_label.pack(side="right")
+
+        # 프로그레스 바
+        self.auto_progressbar = ctk.CTkProgressBar(
+            progress_card,
+            height=8,
+            fg_color=COLORS["bg_input"],
+            progress_color=COLORS["accent"],
+            corner_radius=4
+        )
+        self.auto_progressbar.grid(row=1, column=0, sticky="new", padx=24, pady=(0, 16))
+        self.auto_progressbar.set(0)
+
+        # 로그 영역
+        log_frame = ctk.CTkFrame(
+            progress_card,
+            fg_color=COLORS["code_bg"],
+            corner_radius=STYLES["input_radius"]
+        )
+        log_frame.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 24))
+        progress_card.grid_rowconfigure(2, weight=1)
+
+        self.auto_log_textbox = ctk.CTkTextbox(
+            log_frame,
+            font=ctk.CTkFont(family="SF Mono", size=11),
+            fg_color="transparent",
+            text_color=COLORS["text_secondary"],
+            wrap="word"
+        )
+        self.auto_log_textbox.pack(fill="both", expand=True, padx=8, pady=8)
+        self.auto_log_textbox.insert("0.0", "자동화 로그가 여기에 표시됩니다...\n")
+        self.auto_log_textbox.configure(state="disabled")
+
+        # 템플릿/도메인 목록 업데이트
+        self._update_auto_page_data()
+
+    def _update_auto_page_data(self):
+        """자동 신고 페이지 데이터 업데이트"""
+        # 도메인 목록 업데이트
+        if self.results:
+            domains = list(self.results.keys())
+            self.auto_domain_combo.configure(values=domains)
+            if domains:
+                self.auto_domain_var.set(domains[0])
+                self._on_auto_domain_change(domains[0])
+        else:
+            self.auto_domain_combo.configure(values=["수집된 도메인 없음"])
+            self.auto_domain_var.set("수집된 도메인 없음")
+
+        # 템플릿 목록 업데이트
+        templates = self.config.get("templates", [])
+        if templates:
+            template_names = [t["name"] for t in templates]
+            self.auto_template_combo.configure(values=template_names)
+            self.auto_template_var.set(template_names[0])
+        else:
+            self.auto_template_combo.configure(values=["템플릿 없음"])
+            self.auto_template_var.set("템플릿 없음")
+
+    def _on_auto_domain_change(self, value):
+        """자동 신고 도메인 변경 시"""
+        if value in self.results:
+            count = len(self.results[value])
+            self.auto_url_count_label.configure(text=f"URL: {count}개")
+        else:
+            self.auto_url_count_label.configure(text="URL: 0개")
+
+    def _log_auto(self, message: str):
+        """자동화 로그 추가"""
+        self.auto_log_textbox.configure(state="normal")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.auto_log_textbox.insert("end", f"[{timestamp}] {message}\n")
+        self.auto_log_textbox.see("end")
+        self.auto_log_textbox.configure(state="disabled")
+
+    def _start_automation(self):
+        """자동화 시작"""
+        domain = self.auto_domain_var.get()
+        template_name = self.auto_template_var.get()
+
+        if domain == "수집된 도메인 없음" or domain not in self.results:
+            self._show_toast("먼저 URL을 수집하세요", "warning")
+            return
+
+        if template_name == "템플릿 없음":
+            self._show_toast("템플릿을 선택하세요", "warning")
+            return
+
+        # 템플릿 찾기
+        template = None
+        for t in self.config.get("templates", []):
+            if t["name"] == template_name:
+                template = t
+                break
+
+        if not template:
+            self._show_toast("템플릿을 찾을 수 없습니다", "error")
+            return
+
+        applicant = self.config.get("applicant", {})
+        if not applicant.get("full_name") or not applicant.get("email"):
+            self._show_toast("설정에서 신청인 정보를 입력하세요", "warning")
+            return
+
+        # URL 목록
+        urls = [decode_url(item["url"]) for item in self.results[domain]]
+
+        # 설정
+        try:
+            delay = float(self.auto_delay_var.get())
+        except ValueError:
+            delay = 3.0
+
+        config = AutomationConfig(
+            headless=not self.auto_show_browser_var.get(),
+            delay_between_submissions=delay
+        )
+
+        # UI 업데이트
+        self.auto_start_btn.configure(state="disabled")
+        self.auto_stop_btn.configure(state="normal")
+        self.auto_progressbar.set(0)
+        self._log_auto(f"자동화 시작: {domain} ({len(urls)}개 URL)")
+
+        # 별도 스레드에서 실행
+        def run_in_thread():
+            import asyncio
+
+            async def run():
+                self.reporter = GoogleLegalReporter(config)
+
+                def on_progress(current, total, status):
+                    self.after(0, lambda c=current, t=total, s=status: self._update_auto_progress(c, t, s))
+
+                def on_complete(success, message):
+                    self.after(0, lambda s=success, m=message: self._on_auto_complete(s, m))
+
+                try:
+                    await self.reporter.run_automation(
+                        urls=urls,
+                        applicant=applicant,
+                        template=template,
+                        on_progress=on_progress,
+                        on_complete=on_complete
+                    )
+                except Exception as e:
+                    self.after(0, lambda: self._on_auto_complete(False, str(e)))
+                finally:
+                    try:
+                        await self.reporter.stop()
+                    except:
+                        pass
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run())
+            finally:
+                loop.close()
+
+        self.auto_thread = threading.Thread(target=run_in_thread, daemon=True)
+        self.auto_thread.start()
+
+    def _update_auto_progress(self, current: int, total: int, status: str):
+        """자동화 진행 상황 업데이트"""
+        self.auto_progress_label.configure(text=f"{current} / {total}")
+        self.auto_progressbar.set(current / total if total > 0 else 0)
+        self._log_auto(status)
+
+    def _on_auto_complete(self, success: bool, message: str):
+        """자동화 완료 처리"""
+        self.auto_start_btn.configure(state="normal")
+        self.auto_stop_btn.configure(state="disabled")
+
+        if success:
+            self._log_auto(f"✅ {message}")
+            self._show_toast(message, "success")
+        else:
+            self._log_auto(f"❌ {message}")
+            self._show_toast(message, "error")
+
+    def _stop_automation(self):
+        """자동화 중지"""
+        if hasattr(self, 'reporter') and self.reporter:
+            self.reporter.cancel()
+            self._log_auto("⚠️ 사용자에 의해 중지됨")
+
+        self.auto_start_btn.configure(state="normal")
+        self.auto_stop_btn.configure(state="disabled")
+
+    # ==================== 의견 신고 페이지 ====================
+    def _show_feedback_page(self):
+        self._set_active_nav("feedback")
+        self._clear_pages()
+
+        if "feedback" not in self.pages:
+            self._create_feedback_page()
+        else:
+            self._update_feedback_page_data()
+
+        self.pages["feedback"].grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+
+    def _create_feedback_page(self):
+        """의견 신고 페이지 생성"""
+        page = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        page.grid_columnconfigure(0, weight=1)
+        page.grid_columnconfigure(1, weight=1)
+        page.grid_rowconfigure(1, weight=1)
+        self.pages["feedback"] = page
+
+        # 헤더
+        header = ctk.CTkFrame(page, fg_color="transparent")
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 24))
+
+        header_text = ctk.CTkFrame(header, fg_color="transparent")
+        header_text.pack(side="left")
+
+        ctk.CTkLabel(
+            header_text,
+            text="💬  의견 신고",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=26, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            header_text,
+            text="Google 검색 결과에 의견 제출 자동화",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            text_color=COLORS["text_muted"]
+        ).pack(anchor="w", pady=(4, 0))
+
+        # 왼쪽: 설정 카드
+        settings_card = ctk.CTkFrame(
+            page,
+            fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["card_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+        settings_card.grid(row=1, column=0, sticky="nsew", padx=(0, 12))
+
+        ctk.CTkLabel(
+            settings_card,
+            text="⚙️  의견 설정",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", padx=24, pady=(24, 20))
+
+        # Google 검색 URL 입력
+        url_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        url_frame.pack(fill="x", padx=24, pady=(0, 16))
+
+        ctk.CTkLabel(
+            url_frame,
+            text="Google 검색 결과 URL",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.feedback_search_url_entry = ctk.CTkEntry(
+            url_frame,
+            height=40,
+            placeholder_text="https://www.google.com/search?q=...",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            corner_radius=STYLES["input_radius"]
+        )
+        self.feedback_search_url_entry.pack(fill="x")
+
+        # 의견 템플릿 선택
+        template_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        template_frame.pack(fill="x", padx=24, pady=(0, 16))
+
+        ctk.CTkLabel(
+            template_frame,
+            text="의견 템플릿",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.feedback_template_var = ctk.StringVar()
+        self.feedback_template_combo = ctk.CTkComboBox(
+            template_frame,
+            variable=self.feedback_template_var,
+            values=["템플릿 없음"],
+            height=40,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            button_color=COLORS["border"],
+            button_hover_color=COLORS["accent"],
+            dropdown_fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["input_radius"]
+        )
+        self.feedback_template_combo.pack(fill="x")
+
+        # 브라우저 표시 옵션
+        browser_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        browser_frame.pack(fill="x", padx=24, pady=(0, 24))
+
+        self.feedback_show_browser_var = ctk.BooleanVar(value=True)
+        ctk.CTkSwitch(
+            browser_frame,
+            text="브라우저 표시",
+            variable=self.feedback_show_browser_var,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            progress_color=COLORS["accent"],
+            button_color=COLORS["border"],
+            button_hover_color=COLORS["accent_hover"]
+        ).pack(anchor="w")
+
+        # 버튼
+        button_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
+        button_frame.pack(fill="x", padx=24, pady=(0, 24))
+
+        self.feedback_start_btn = ctk.CTkButton(
+            button_frame,
+            text="🚀  시작하기",
+            height=44,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            corner_radius=STYLES["button_radius"],
+            command=self._start_feedback_automation
+        )
+        self.feedback_start_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self.feedback_stop_btn = ctk.CTkButton(
+            button_frame,
+            text="⏸  중지",
+            height=44,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            fg_color=COLORS["error"],
+            hover_color="#dc2626",
+            corner_radius=STYLES["button_radius"],
+            state="disabled",
+            command=self._stop_feedback_automation
+        )
+        self.feedback_stop_btn.pack(side="left", fill="x", expand=True)
+
+        # 오른쪽: 진행 상황 카드
+        progress_card = ctk.CTkFrame(
+            page,
+            fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["card_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+        progress_card.grid(row=1, column=1, sticky="nsew", padx=(12, 0))
+
+        ctk.CTkLabel(
+            progress_card,
+            text="📊  진행 상황",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", padx=24, pady=(24, 20))
+
+        # 프로그레스 바
+        progress_bar_frame = ctk.CTkFrame(progress_card, fg_color="transparent")
+        progress_bar_frame.pack(fill="x", padx=24, pady=(0, 16))
+
+        self.feedback_progressbar = ctk.CTkProgressBar(
+            progress_bar_frame,
+            height=12,
+            progress_color=COLORS["accent"],
+            fg_color=COLORS["bg_input"],
+            corner_radius=6
+        )
+        self.feedback_progressbar.pack(fill="x", pady=(0, 8))
+        self.feedback_progressbar.set(0)
+
+        self.feedback_progress_label = ctk.CTkLabel(
+            progress_bar_frame,
+            text="0 / 0",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+            text_color=COLORS["text_muted"]
+        )
+        self.feedback_progress_label.pack(anchor="e")
+
+        # 로그
+        ctk.CTkLabel(
+            progress_card,
+            text="실시간 로그",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
+            text_color=COLORS["text_muted"]
+        ).pack(anchor="w", padx=24, pady=(0, 8))
+
+        log_frame = ctk.CTkFrame(
+            progress_card,
+            fg_color=COLORS["code_bg"],
+            corner_radius=8,
+            border_width=1,
+            border_color=COLORS["border"]
+        )
+        log_frame.pack(fill="both", expand=True, padx=24, pady=(0, 24))
+
+        self.feedback_log_textbox = ctk.CTkTextbox(
+            log_frame,
+            font=ctk.CTkFont(family="SF Mono", size=11),
+            fg_color="transparent",
+            text_color=COLORS["text_secondary"],
+            wrap="word",
+            state="disabled"
+        )
+        self.feedback_log_textbox.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # 초기 데이터 업데이트
+        self._update_feedback_page_data()
+
+    def _update_feedback_page_data(self):
+        """의견 신고 페이지 데이터 업데이트"""
+        # 의견 템플릿 목록 업데이트
+        feedback_templates = self.config.get("feedback_templates", [])
+        if feedback_templates:
+            template_names = [t["name"] for t in feedback_templates]
+            self.feedback_template_combo.configure(values=template_names)
+            if template_names:
+                self.feedback_template_var.set(template_names[0])
+        else:
+            self.feedback_template_combo.configure(values=["템플릿 없음"])
+            self.feedback_template_var.set("템플릿 없음")
+
+    def _log_feedback(self, message: str):
+        """의견 신고 로그 추가"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_message = f"[{timestamp}] {message}\n"
+
+        self.feedback_log_textbox.configure(state="normal")
+        self.feedback_log_textbox.insert("end", log_message)
+        self.feedback_log_textbox.see("end")
+        self.feedback_log_textbox.configure(state="disabled")
+
+    def _start_feedback_automation(self):
+        """의견 신고 자동화 시작"""
+        # 검색 URL 검증
+        search_url = self.feedback_search_url_entry.get().strip()
+        if not search_url:
+            self._show_toast("Google 검색 결과 URL을 입력하세요", "error")
+            return
+
+        if not search_url.startswith("https://www.google.com/search"):
+            self._show_toast("올바른 Google 검색 URL이 아닙니다", "error")
+            return
+
+        # 템플릿 검증
+        template_name = self.feedback_template_var.get()
+        if not template_name or template_name == "템플릿 없음":
+            self._show_toast("의견 템플릿을 선택하세요", "error")
+            return
+
+        feedback_templates = self.config.get("feedback_templates", [])
+        template_obj = next((t for t in feedback_templates if t["name"] == template_name), None)
+        if not template_obj:
+            self._show_toast("선택한 템플릿을 찾을 수 없습니다", "error")
+            return
+
+        template_text = template_obj.get("opinion", "")
+
+        # UI 상태 변경
+        self.feedback_start_btn.configure(state="disabled")
+        self.feedback_stop_btn.configure(state="normal")
+        self.feedback_progressbar.set(0)
+        self.feedback_progress_label.configure(text="0 / 10")
+
+        # 로그 초기화
+        self.feedback_log_textbox.configure(state="normal")
+        self.feedback_log_textbox.delete("1.0", "end")
+        self.feedback_log_textbox.configure(state="disabled")
+
+        self._log_feedback("🚀 의견 신고 자동화를 시작합니다...")
+
+        # 브라우저 표시 옵션
+        show_browser = self.feedback_show_browser_var.get()
+
+        # 첫 10개 검색 결과에 대해 의견 제출
+        result_indices = list(range(10))
+
+        def run_in_thread():
+            import asyncio
+
+            async def run():
+                try:
+                    config = FeedbackConfig(
+                        headless=not show_browser,
+                        delay_between_submissions=3.0
+                    )
+
+                    self.feedback_reporter = GoogleFeedbackReporter(config)
+                    await self.feedback_reporter.start()
+
+                    def on_progress(current, total, status):
+                        self.after(0, lambda: self._update_feedback_progress(current, total, status))
+
+                    def on_complete(success, message):
+                        self.after(0, lambda: self._on_feedback_complete(success, message))
+
+                    await self.feedback_reporter.run_automation(
+                        search_url=search_url,
+                        result_indices=result_indices,
+                        template=template_text,
+                        on_progress=on_progress,
+                        on_complete=on_complete
+                    )
+                except Exception as e:
+                    self.after(0, lambda: self._on_feedback_complete(False, str(e)))
+                finally:
+                    try:
+                        await self.feedback_reporter.stop()
+                    except:
+                        pass
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run())
+            finally:
+                loop.close()
+
+        self.feedback_thread = threading.Thread(target=run_in_thread, daemon=True)
+        self.feedback_thread.start()
+
+    def _update_feedback_progress(self, current: int, total: int, status: str):
+        """의견 신고 진행 상황 업데이트"""
+        self.feedback_progress_label.configure(text=f"{current} / {total}")
+        self.feedback_progressbar.set(current / total if total > 0 else 0)
+        self._log_feedback(status)
+
+    def _on_feedback_complete(self, success: bool, message: str):
+        """의견 신고 완료 처리"""
+        self.feedback_start_btn.configure(state="normal")
+        self.feedback_stop_btn.configure(state="disabled")
+
+        if success:
+            self._log_feedback(f"✅ {message}")
+            self._show_toast(message, "success")
+        else:
+            self._log_feedback(f"❌ {message}")
+            self._show_toast(message, "error")
+
+    def _stop_feedback_automation(self):
+        """의견 신고 자동화 중지"""
+        if hasattr(self, 'feedback_reporter') and self.feedback_reporter:
+            self.feedback_reporter.cancel()
+            self._log_feedback("⚠️ 사용자에 의해 중지됨")
+
+        self.feedback_start_btn.configure(state="normal")
+        self.feedback_stop_btn.configure(state="disabled")
+
+    # ==================== 의견 신고 코드 페이지 ====================
+    def _show_feedback_code_page(self):
+        self._set_active_nav("feedback_code")
+        self._clear_pages()
+
+        if "feedback_code" not in self.pages:
+            self._create_feedback_code_page()
+
+        self.pages["feedback_code"].grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+
+    def _create_feedback_code_page(self):
+        """의견 신고 코드 페이지 생성"""
+        page = ctk.CTkFrame(self.main_content, fg_color="transparent")
+        page.grid_columnconfigure(0, weight=1)
+        page.grid_rowconfigure(1, weight=1)
+        self.pages["feedback_code"] = page
+
+        # 헤더
+        header = ctk.CTkFrame(page, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 24))
+
+        header_text = ctk.CTkFrame(header, fg_color="transparent")
+        header_text.pack(side="left")
+
+        ctk.CTkLabel(
+            header_text,
+            text="의견 신고 코드 생성",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=26, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            header_text,
+            text="Google 검색 결과에 의견 신고를 자동으로 제출하는 JavaScript 코드",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            text_color=COLORS["text_muted"]
+        ).pack(anchor="w", pady=(4, 0))
+
+        # 메인 컨텐츠
+        content = ctk.CTkFrame(page, fg_color="transparent")
+        content.grid(row=1, column=0, sticky="nsew")
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_columnconfigure(1, weight=2)
+        content.grid_rowconfigure(0, weight=1)
+
+        # 왼쪽: 옵션
+        options_card = ctk.CTkFrame(
+            content,
+            fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["card_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+        options_card.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+
+        # 서브 카테고리 선택 (기타 → 스팸 콘텐츠/기타)
+        type_section = ctk.CTkFrame(options_card, fg_color="transparent")
+        type_section.pack(fill="x", padx=24, pady=(24, 16))
+
+        ctk.CTkLabel(
+            type_section,
+            text="세부 항목 (기타 하위)",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", pady=(0, 10))
+
+        # 기타 하위 옵션들
+        sub_categories = [
+            "스팸 콘텐츠",
+            "기타"
+        ]
+
+        self.feedback_type_var = ctk.StringVar(value="스팸 콘텐츠")
+        self.feedback_type_combo = ctk.CTkComboBox(
+            type_section,
+            values=sub_categories,
+            variable=self.feedback_type_var,
+            height=40,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            button_color=COLORS["accent"],
+            dropdown_fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["input_radius"]
+        )
+        self.feedback_type_combo.pack(fill="x")
+
+        # 의견 입력
+        opinion_section = ctk.CTkFrame(options_card, fg_color="transparent")
+        opinion_section.pack(fill="x", padx=24, pady=(0, 16))
+
+        ctk.CTkLabel(
+            opinion_section,
+            text="의견 내용",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", pady=(0, 10))
+
+        self.feedback_opinion_text = ctk.CTkTextbox(
+            opinion_section,
+            height=120,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            border_width=1,
+            border_color=COLORS["border"],
+            corner_radius=STYLES["input_radius"]
+        )
+        self.feedback_opinion_text.pack(fill="x")
+        self.feedback_opinion_text.insert("0.0", "이 사이트는 불법 도박 사이트입니다. 사용자를 속이고 금전적 피해를 유발합니다.")
+
+        # 코드 생성 버튼
+        ctk.CTkButton(
+            options_card,
+            text="⚡  코드 생성",
+            height=44,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            corner_radius=STYLES["button_radius"],
+            command=self._generate_feedback_code
+        ).pack(fill="x", padx=24, pady=(8, 16))
+
+        # 안내 텍스트
+        guide_frame = ctk.CTkFrame(
+            options_card,
+            fg_color=COLORS["bg_input"],
+            corner_radius=STYLES["input_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+        guide_frame.pack(fill="x", padx=24, pady=(0, 24))
+
+        ctk.CTkLabel(
+            guide_frame,
+            text="💡  사용법",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(anchor="w", padx=16, pady=(16, 8))
+
+        guide_text = """1. Google 검색 결과 페이지 열기
+2. 신고할 결과 클릭 (상세 패널 열림)
+3. F12 → Console 탭 선택
+4. 'allow pasting' 입력 후 Enter
+5. 생성된 코드 붙여넣기
+6. Enter 키로 실행"""
+
+        ctk.CTkLabel(
+            guide_frame,
+            text=guide_text,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+            text_color=COLORS["text_muted"],
+            justify="left"
+        ).pack(anchor="w", padx=16, pady=(0, 16))
+
+        # 오른쪽: 코드 영역
+        code_card = ctk.CTkFrame(
+            content,
+            fg_color=COLORS["bg_card"],
+            corner_radius=STYLES["card_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+        code_card.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        code_card.grid_columnconfigure(0, weight=1)
+        code_card.grid_rowconfigure(1, weight=1)
+
+        code_header = ctk.CTkFrame(code_card, fg_color="transparent")
+        code_header.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 12))
+
+        ctk.CTkLabel(
+            code_header,
+            text="</> JavaScript 코드",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
+            text_color=COLORS["text"]
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            code_header,
+            text="복사",
+            width=80,
+            height=32,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            hover_color=COLORS["border"],
+            corner_radius=6,
+            command=self._copy_feedback_code
+        ).pack(side="right")
+
+        self.feedback_code_textbox = ctk.CTkTextbox(
+            code_card,
+            font=ctk.CTkFont(family="SF Mono", size=11),
+            fg_color=COLORS["code_bg"],
+            text_color="#d4d4d4",
+            border_width=0,
+            corner_radius=8
+        )
+        self.feedback_code_textbox.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+        # 초기 안내 메시지
+        self.feedback_code_textbox.insert("0.0", "// 템플릿을 선택하고 '코드 생성' 버튼을 클릭하세요")
+
+    def _generate_feedback_code(self):
+        """의견 신고 코드 생성"""
+        # 피드백 타입 가져오기
+        feedback_type = self.feedback_type_var.get() if hasattr(self, 'feedback_type_var') else "스팸 콘텐츠"
+
+        # 의견 내용 가져오기
+        custom_opinion = ""
+        if hasattr(self, 'feedback_opinion_text'):
+            custom_opinion = self.feedback_opinion_text.get("0.0", "end").strip()
+
+        if not custom_opinion:
+            self.feedback_code_textbox.delete("0.0", "end")
+            self.feedback_code_textbox.insert("0.0", "// 의견 내용을 입력해주세요")
+            self._show_toast("의견 내용을 입력해주세요", "warning")
+            return
+
+        # JavaScript 코드 생성
+        try:
+            js_code = generate_feedback_code(
+                template={},
+                feedback_type=feedback_type,
+                custom_opinion=custom_opinion
+            )
+            self.feedback_code_textbox.delete("0.0", "end")
+            self.feedback_code_textbox.insert("0.0", js_code)
+            self._show_toast(f"'{feedback_type}' 코드가 생성되었습니다", "success")
+        except Exception as e:
+            self.feedback_code_textbox.delete("0.0", "end")
+            self.feedback_code_textbox.insert("0.0", f"// 코드 생성 중 오류 발생: {str(e)}")
+            self._show_toast("코드 생성 실패", "error")
+
+    def _copy_feedback_code(self):
+        """의견 신고 코드 복사"""
+        code = self.feedback_code_textbox.get("0.0", "end").strip()
+        # 실제 생성된 코드인지 확인 (async function 포함 여부)
+        if code and "(async function()" in code:
+            self.clipboard_clear()
+            self.clipboard_append(code)
+            self._show_toast("코드가 클립보드에 복사되었습니다", "success")
+        else:
+            self._show_toast("먼저 코드를 생성해주세요", "warning")
+
     # ==================== 설정 페이지 ====================
     def _show_settings_page(self):
         self._set_active_nav("settings")
@@ -1431,7 +2466,7 @@ class URLCollectorApp(ctk.CTk):
         template_card.grid_rowconfigure(2, weight=1)
 
         template_header = ctk.CTkFrame(template_card, fg_color="transparent")
-        template_header.pack(fill="x", padx=24, pady=(24, 20))
+        template_header.pack(fill="x", padx=24, pady=(24, 16))
 
         ctk.CTkLabel(
             template_header,
@@ -1440,7 +2475,27 @@ class URLCollectorApp(ctk.CTk):
             text_color=COLORS["text"]
         ).pack(side="left")
 
-        ctk.CTkButton(
+        # 템플릿 타입 선택 (Segmented Button)
+        template_type_frame = ctk.CTkFrame(template_card, fg_color="transparent")
+        template_type_frame.pack(fill="x", padx=24, pady=(0, 12))
+
+        self.template_type_var = ctk.StringVar(value="legal")
+        template_type_selector = ctk.CTkSegmentedButton(
+            template_type_frame,
+            values=["법적 신고", "의견"],
+            variable=self.template_type_var,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_input"],
+            selected_color=COLORS["accent"],
+            selected_hover_color=COLORS["accent_hover"],
+            unselected_color=COLORS["bg_input"],
+            unselected_hover_color=COLORS["border"],
+            corner_radius=STYLES["button_radius"],
+            command=self._on_template_type_change
+        )
+        template_type_selector.pack(fill="x")
+
+        self.new_template_button = ctk.CTkButton(
             template_header,
             text="+ 새 템플릿",
             width=100,
@@ -1452,7 +2507,8 @@ class URLCollectorApp(ctk.CTk):
             border_color=COLORS["border"],
             corner_radius=STYLES["button_radius"],
             command=self._add_new_template
-        ).pack(side="right")
+        )
+        self.new_template_button.pack(side="right")
 
         # 템플릿 리스트 (고정 높이 컨테이너)
         list_container = ctk.CTkFrame(
@@ -1470,21 +2526,27 @@ class URLCollectorApp(ctk.CTk):
         )
         self.template_list_frame.pack(fill="both", expand=True)
 
+        # 의견 템플릿 리스트 (법적 신고와 별도)
+        self.feedback_template_list_frame = ctk.CTkScrollableFrame(
+            list_container,
+            fg_color="transparent"
+        )
+
         self._refresh_template_list()
 
-        # 템플릿 편집 영역 (컨테이너)
-        edit_container = ctk.CTkFrame(
+        # 템플릿 편집 영역 (컨테이너) - 법적 신고용
+        self.legal_edit_container = ctk.CTkFrame(
             template_card,
             fg_color=COLORS["bg_input"],
             corner_radius=STYLES["input_radius"],
             border_width=1,
             border_color=COLORS["border_subtle"]
         )
-        edit_container.pack(fill="both", expand=True, padx=24, pady=(0, 24))
+        self.legal_edit_container.pack(fill="both", expand=True, padx=24, pady=(0, 24))
 
         # 스크롤 가능한 편집 영역
         edit_frame = ctk.CTkScrollableFrame(
-            edit_container,
+            self.legal_edit_container,
             fg_color="transparent"
         )
         edit_frame.pack(fill="both", expand=True, padx=4, pady=(8, 0))
@@ -1667,7 +2729,7 @@ class URLCollectorApp(ctk.CTk):
 
         # 저장 버튼 (스크롤 영역 밖, 하단 고정)
         ctk.CTkButton(
-            edit_container,
+            self.legal_edit_container,
             text="💾  템플릿 저장",
             height=38,
             font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
@@ -1684,8 +2746,94 @@ class URLCollectorApp(ctk.CTk):
         self.check2_dependent_frame.pack_forget()
         self.check3_dependent_frame.pack_forget()
 
+        # ===== 의견 템플릿 편집 영역 =====
+        self.feedback_edit_container = ctk.CTkFrame(
+            template_card,
+            fg_color=COLORS["bg_input"],
+            corner_radius=STYLES["input_radius"],
+            border_width=1,
+            border_color=COLORS["border_subtle"]
+        )
+
+        feedback_edit_frame = ctk.CTkScrollableFrame(
+            self.feedback_edit_container,
+            fg_color="transparent"
+        )
+        feedback_edit_frame.pack(fill="both", expand=True, padx=4, pady=(8, 0))
+
+        # 템플릿 이름
+        self.feedback_template_name_entry = ctk.CTkEntry(
+            feedback_edit_frame,
+            height=40,
+            placeholder_text="템플릿 이름을 입력하세요",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLORS["bg_card"],
+            border_color=COLORS["border"],
+            border_width=1,
+            corner_radius=STYLES["input_radius"]
+        )
+        self.feedback_template_name_entry.pack(fill="x", padx=16, pady=(16, 12))
+
+        ctk.CTkLabel(
+            feedback_edit_frame,
+            text="의견 내용",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
+            text_color=COLORS["text_secondary"]
+        ).pack(anchor="w", padx=16)
+
+        # 의견 내용 텍스트 영역
+        self.feedback_template_opinion_textbox = ctk.CTkTextbox(
+            feedback_edit_frame,
+            height=150,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+            fg_color=COLORS["bg_card"],
+            border_width=1,
+            border_color=COLORS["border_subtle"],
+            corner_radius=STYLES["input_radius"]
+        )
+        self.feedback_template_opinion_textbox.pack(fill="both", expand=True, padx=16, pady=(6, 12))
+
+        # 저장 버튼
+        ctk.CTkButton(
+            self.feedback_edit_container,
+            text="💾  의견 템플릿 저장",
+            height=38,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            corner_radius=STYLES["button_radius"],
+            command=self._save_feedback_template
+        ).pack(fill="x", padx=12, pady=12)
+
+        self.current_feedback_template_index = None
+
+        # 초기에는 의견 템플릿 편집 영역 숨김
+        self.feedback_edit_container.pack_forget()
+        self.feedback_template_list_frame.pack_forget()
+
+    def _on_template_type_change(self):
+        """템플릿 타입 변경 시 UI 전환"""
+        template_type = self.template_type_var.get()
+
+        if template_type == "법적 신고":
+            # 법적 신고 템플릿 UI 표시
+            self.template_list_frame.pack(fill="both", expand=True)
+            self.legal_edit_container.pack(fill="both", expand=True, padx=24, pady=(0, 24))
+            self.feedback_template_list_frame.pack_forget()
+            self.feedback_edit_container.pack_forget()
+            self.new_template_button.configure(command=self._add_new_template)
+            self._refresh_template_list()
+        else:
+            # 의견 템플릿 UI 표시
+            self.feedback_template_list_frame.pack(fill="both", expand=True)
+            self.feedback_edit_container.pack(fill="both", expand=True, padx=24, pady=(0, 24))
+            self.template_list_frame.pack_forget()
+            self.legal_edit_container.pack_forget()
+            self.new_template_button.configure(command=self._add_new_feedback_template)
+            self._refresh_feedback_template_list()
+
     def _refresh_template_list(self):
-        """템플릿 리스트 새로고침"""
+        """법적 신고 템플릿 리스트 새로고침"""
         for widget in self.template_list_frame.winfo_children():
             widget.destroy()
 
@@ -1757,6 +2905,81 @@ class URLCollectorApp(ctk.CTk):
                 border_color="#4a2020",
                 corner_radius=6,
                 command=lambda idx=i: self._delete_template(idx)
+            ).pack(side="left")
+
+    def _refresh_feedback_template_list(self):
+        """의견 템플릿 리스트 새로고침"""
+        for widget in self.feedback_template_list_frame.winfo_children():
+            widget.destroy()
+
+        templates = self.config.get("feedback_templates", [])
+
+        if not templates:
+            empty_frame = ctk.CTkFrame(self.feedback_template_list_frame, fg_color="transparent")
+            empty_frame.pack(fill="x", pady=24)
+
+            ctk.CTkLabel(
+                empty_frame,
+                text="📭",
+                font=ctk.CTkFont(family=FONT_FAMILY, size=24),
+                text_color=COLORS["text_muted"]
+            ).pack()
+
+            ctk.CTkLabel(
+                empty_frame,
+                text="저장된 의견 템플릿이 없습니다",
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+                text_color=COLORS["text_muted"]
+            ).pack(pady=(8, 0))
+            return
+
+        for i, template in enumerate(templates):
+            item_frame = ctk.CTkFrame(
+                self.feedback_template_list_frame,
+                fg_color=COLORS["bg_input"],
+                corner_radius=STYLES["button_radius"],
+                border_width=1,
+                border_color=COLORS["border_subtle"]
+            )
+            item_frame.pack(fill="x", pady=3)
+
+            ctk.CTkLabel(
+                item_frame,
+                text=f"💬  {template['name']}",
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+                text_color=COLORS["text"]
+            ).pack(side="left", padx=14, pady=10)
+
+            btn_group = ctk.CTkFrame(item_frame, fg_color="transparent")
+            btn_group.pack(side="right", padx=10)
+
+            ctk.CTkButton(
+                btn_group,
+                text="편집",
+                width=56,
+                height=28,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+                fg_color="transparent",
+                hover_color=COLORS["border"],
+                border_width=1,
+                border_color=COLORS["border"],
+                corner_radius=6,
+                command=lambda idx=i: self._edit_feedback_template(idx)
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                btn_group,
+                text="삭제",
+                width=56,
+                height=28,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+                fg_color="transparent",
+                hover_color="#3f1515",
+                text_color=COLORS["error"],
+                border_width=1,
+                border_color="#4a2020",
+                corner_radius=6,
+                command=lambda idx=i: self._delete_feedback_template(idx)
             ).pack(side="left")
 
     def _on_check1_changed(self):
@@ -1919,6 +3142,73 @@ class URLCollectorApp(ctk.CTk):
         self.template_victim_name_entry.delete(0, "end")
         self.template_keyword_entry.delete(0, "end")
         self._update_template_checkboxes_visibility()
+
+    def _add_new_feedback_template(self):
+        """새 의견 템플릿 추가 준비"""
+        self.current_feedback_template_index = None
+        self.feedback_template_name_entry.delete(0, "end")
+        self.feedback_template_opinion_textbox.delete("0.0", "end")
+        self.feedback_template_name_entry.focus()
+
+    def _edit_feedback_template(self, index: int):
+        """의견 템플릿 편집"""
+        templates = self.config.get("feedback_templates", [])
+        if index < len(templates):
+            template = templates[index]
+            self.current_feedback_template_index = index
+
+            self.feedback_template_name_entry.delete(0, "end")
+            self.feedback_template_name_entry.insert(0, template.get("name", ""))
+
+            self.feedback_template_opinion_textbox.delete("0.0", "end")
+            self.feedback_template_opinion_textbox.insert("0.0", template.get("opinion", ""))
+
+    def _delete_feedback_template(self, index: int):
+        """의견 템플릿 삭제"""
+        templates = self.config.get("feedback_templates", [])
+        if index < len(templates):
+            name = templates[index].get("name", "")
+            templates.pop(index)
+            self.config["feedback_templates"] = templates
+            self._save_config()
+            self._refresh_feedback_template_list()
+            self._show_toast(f"'{name}' 의견 템플릿이 삭제되었습니다", "info")
+
+    def _save_feedback_template(self):
+        """의견 템플릿 저장"""
+        name = self.feedback_template_name_entry.get().strip()
+        opinion = self.feedback_template_opinion_textbox.get("0.0", "end").strip()
+
+        if not name:
+            self._show_toast("템플릿 이름을 입력해주세요", "warning")
+            return
+
+        if not opinion:
+            self._show_toast("의견 내용을 입력해주세요", "warning")
+            return
+
+        template = {
+            "name": name,
+            "opinion": opinion
+        }
+
+        templates = self.config.get("feedback_templates", [])
+
+        if self.current_feedback_template_index is not None:
+            templates[self.current_feedback_template_index] = template
+            self._show_toast(f"'{name}' 의견 템플릿이 수정되었습니다", "success")
+        else:
+            templates.append(template)
+            self._show_toast(f"'{name}' 의견 템플릿이 추가되었습니다", "success")
+
+        self.config["feedback_templates"] = templates
+        self._save_config()
+        self._refresh_feedback_template_list()
+
+        # 입력 필드 초기화
+        self.current_feedback_template_index = None
+        self.feedback_template_name_entry.delete(0, "end")
+        self.feedback_template_opinion_textbox.delete("0.0", "end")
 
     def _save_applicant_info(self):
         """신청인 정보 저장"""
