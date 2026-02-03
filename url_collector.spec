@@ -8,6 +8,14 @@ from pathlib import Path
 import customtkinter
 ctk_path = Path(customtkinter.__file__).parent
 
+# 플랫폼별 아이콘 경로
+if sys.platform == 'darwin':
+    icon_path = 'assets/icon.icns'
+elif sys.platform == 'win32':
+    icon_path = 'assets/icon.ico'
+else:
+    icon_path = None
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -51,5 +59,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # 아이콘 파일이 있으면 여기에 경로 지정
+    icon=icon_path,
 )
